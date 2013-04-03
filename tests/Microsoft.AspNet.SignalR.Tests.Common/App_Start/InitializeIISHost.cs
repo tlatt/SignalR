@@ -47,7 +47,7 @@ namespace Microsoft.AspNet.SignalR.FunctionalTests.Infrastructure.IIS
                 EnableDetailedErrors = true
             };
 
-            RouteTable.Routes.MapHubs("signalr.hubs2", "signalr2/test", new HubConfiguration());
+            RouteTable.Routes.MapHubs("signalr.hubs2", "signalr2/test", new HubConfiguration(), (app) => { });
             RouteTable.Routes.MapHubs(config);
 
             RouteTable.Routes.MapConnection<MyBadConnection>("errors-are-fun", "ErrorsAreFun");

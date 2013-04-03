@@ -14,13 +14,21 @@ namespace Microsoft.AspNet.SignalR.Client.Samples
             // RunInMemoryHost();
 #endif
 
-            // var hubConnection = new HubConnection("http://localhost:40476/");
+            var hubConnection = new HubConnection("http://localhost:40476/");
 
-            // RunDemoHub(hubConnection);
+            RunDemoHub(hubConnection);
 
-            RunStreamingSample();
+            // RunStreamingSample();
 
             Console.ReadKey();
+        }
+
+        private static void RunHeaderAuthSample(HubConnection hubConnection)
+        {
+            var demo = hubConnection.CreateHubProxy("HeaderAuthHub");
+            hubConnection.Headers.Add("username", "john");
+            hubConnection.Start().Wait();
+            demo.On("display", (msg) => Console.WriteLine(msg));
         }
 
         private static void RunDemoHub(HubConnection hubConnection)
