@@ -151,54 +151,57 @@ namespace Microsoft.AspNet.SignalR.Tests
         [Fact]
         public void FarmDisconnectOnlyRaisesEventOnce()
         {
-            EnableTracing();
-
-            // Each node shares the same bus but are indepenent servers
-            var counters = new SignalR.Infrastructure.PerformanceCounterManager();
-            var configurationManager = new DefaultConfigurationManager();
-            using (var bus = new MessageBus(new StringMinifier(), new TraceManager(), counters, configurationManager, 5000))
+            while (true)
             {
-                var nodeCount = 3;
-                var nodes = new List<ServerNode>();
-                for (int i = 0; i < nodeCount; i++)
-                {
-                    nodes.Add(new ServerNode(bus));
-                }
+                EnableTracing();
 
-                var timeout = TimeSpan.FromSeconds(5);
-                foreach (var node in nodes)
+                // Each node shares the same bus but are indepenent servers
+                var counters = new SignalR.Infrastructure.PerformanceCounterManager();
+                var configurationManager = new DefaultConfigurationManager();
+                using (var bus = new MessageBus(new StringMinifier(), new TraceManager(), counters, configurationManager, 5000))
                 {
-                    var config = node.Resolver.Resolve<IConfigurationManager>();
-                    config.DisconnectTimeout = TimeSpan.FromSeconds(6);
-
-                    IDependencyResolver resolver = node.Resolver;
-                    node.Server.Configure(app =>
+                    var nodeCount = 3;
+                    var nodes = new List<ServerNode>();
+                    for (int i = 0; i < nodeCount; i++)
                     {
-                        app.MapConnection<FarmConnection>("/echo", new ConnectionConfiguration
+                        nodes.Add(new ServerNode(bus));
+                    }
+
+                    var timeout = TimeSpan.FromSeconds(5);
+                    foreach (var node in nodes)
+                    {
+                        var config = node.Resolver.Resolve<IConfigurationManager>();
+                        config.DisconnectTimeout = TimeSpan.FromSeconds(6);
+
+                        IDependencyResolver resolver = node.Resolver;
+                        node.Server.Configure(app =>
                         {
-                            Resolver = resolver
+                            app.MapConnection<FarmConnection>("/echo", new ConnectionConfiguration
+                            {
+                                Resolver = resolver
+                            });
                         });
-                    });
+                    }
+
+                    var loadBalancer = new LoadBalancer(nodes.Select(f => f.Server).ToArray());
+                    var transport = new Client.Transports.LongPollingTransport(loadBalancer);
+
+                    var connection = new Client.Connection("http://goo/echo");
+
+                    connection.Start(transport).Wait();
+
+                    for (int i = 0; i < nodes.Count; i++)
+                    {
+                        nodes[i].Broadcast(String.Format("From Node {0}: {1}", i, i + 1));
+                        Thread.Sleep(TimeSpan.FromSeconds(1));
+                    }
+
+                    ((Client.IConnection)connection).Disconnect();
+
+                    Thread.Sleep(TimeSpan.FromTicks(timeout.Ticks * nodes.Count));
+
+                    Assert.Equal(1, nodes.Sum(n => n.Connection.DisconnectCount));
                 }
-
-                var loadBalancer = new LoadBalancer(nodes.Select(f => f.Server).ToArray());
-                var transport = new Client.Transports.LongPollingTransport(loadBalancer);
-
-                var connection = new Client.Connection("http://goo/echo");
-
-                connection.Start(transport).Wait();
-
-                for (int i = 0; i < nodes.Count; i++)
-                {
-                    nodes[i].Broadcast(String.Format("From Node {0}: {1}", i, i + 1));
-                    Thread.Sleep(TimeSpan.FromSeconds(1));
-                }
-
-                ((Client.IConnection)connection).Disconnect();
-
-                Thread.Sleep(TimeSpan.FromTicks(timeout.Ticks * nodes.Count));
-
-                Assert.Equal(1, nodes.Sum(n => n.Connection.DisconnectCount));
             }
         }
 
